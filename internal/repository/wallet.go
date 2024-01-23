@@ -57,8 +57,8 @@ func (wr *walletRepoImpl) CreateWallet(ctx context.Context) (entity.Wallet, erro
 // вспомогательные функции для совершения транзакции - Dont Repeat Youtself ;)
 func (wr *walletRepoImpl) getWallet(ctx context.Context, walletId uuid.UUID) (entity.Wallet, error) {
 	sql, args, err := wr.db.Builder.
-		Select("wallets").
-		Columns("id", "balance").
+		Select("id", "balance").
+		From("wallets").
 		Where("id = ?", walletId).
 		ToSql()
 	if err != nil {
@@ -159,7 +159,42 @@ func (wr *walletRepoImpl) Transfer(ctx context.Context, from, to uuid.UUID, amou
 }
 
 func (wr *walletRepoImpl) GetTransactionHistory(ctx context.Context, walletId uuid.UUID) ([]entity.Transaction, error) {
-	return nil, nil
+	// проверка на существование кошелька
+	wallet, err := wr.getWallet(ctx, walletId)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, repoerrors.ErrWalletNotFound
+	}
+	if err != nil {
+		slog.Error("walletRepoImpl.Transfer - getWallet", "err", err)
+		return nil, err
+	}
+
+	sql, args, err := wr.db.Builder.
+		Select("made_at", "transfered_from", "transfered_to", "amount").
+		From("transactions").
+		Where("transfered_from = ? OR transfered_to = ?", wallet.Id, wallet.Id).
+		ToSql()
+	if err != nil {
+		slog.Error("walletRepoImpl.GetTransactionHistory - db.Builder", "err", err)
+		return nil, err
+	}
+
+	rows, err := wr.db.ConnPool.Query(ctx, sql, args)
+	if err != nil {
+		slog.Error("walletRepoImpl.GetTransactionHistory - db.ConnPool.Query", "err", err)
+		return nil, err
+	}
+
+	var transactions []entity.Transaction
+	for rows.Next() {
+		var tx entity.Transaction
+		// игнорируем ошибку, но:
+		// можно бы было сделать ошибку ErrScan или типа того, и записывать ее в переменную
+		// в скоупе вне цикла, а затем возвращать неполный список транзакций и ошибку
+		_ = rows.Scan(&tx)
+		transactions = append(transactions, tx)
+	}
+	return transactions, nil
 }
 
 func (wr *walletRepoImpl) GetWalletStatus(ctx context.Context, walletId uuid.UUID) (entity.Wallet, error) {
