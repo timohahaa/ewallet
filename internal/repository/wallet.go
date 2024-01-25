@@ -40,12 +40,13 @@ func (wr *walletRepoImpl) CreateWallet(ctx context.Context) (entity.Wallet, erro
 		Columns("id", "balance").
 		Values(newWalletID, InitialWalletBalance).
 		ToSql()
+
 	if err != nil {
 		slog.Error("walletRepoImpl.CreateWallet - db.Builder", "err", err)
 		return entity.Wallet{}, err
 	}
 
-	_, err = wr.db.ConnPool.Exec(ctx, sql, args)
+	_, err = wr.db.ConnPool.Exec(ctx, sql, args...)
 
 	if err != nil {
 		slog.Error("walletRepoImpl.CreateWallet - db.ConnPool.Exec", "err", err)
@@ -67,10 +68,10 @@ func (wr *walletRepoImpl) getWallet(ctx context.Context, walletId uuid.UUID) (en
 	}
 
 	var wallet entity.Wallet
-	err = wr.db.ConnPool.QueryRow(ctx, sql, args).Scan(&wallet)
+	err = wr.db.ConnPool.QueryRow(ctx, sql, args...).Scan(&wallet.Id, &wallet.Balance)
 	// кошелек не найден
 	if errors.Is(err, pgx.ErrNoRows) {
-		return entity.Wallet{}, repoerrors.ErrWalletNotFound
+		return entity.Wallet{}, pgx.ErrNoRows
 	}
 	if err != nil {
 		slog.Error("walletRepoImpl.getWallet - db.ConnPool.QueryRow", "err", err)
@@ -87,7 +88,7 @@ func (wr *walletRepoImpl) updateWallet(ctx context.Context, walletId uuid.UUID, 
 		Where("id = ?", walletId).
 		ToSql()
 
-	_, err = wr.db.ConnPool.Exec(ctx, sql, args)
+	_, err = wr.db.ConnPool.Exec(ctx, sql, args...)
 	if err != nil {
 		slog.Error("walletRepoImpl.updateWallet - db.ConnPool.Exec", "err", err)
 		return err
@@ -149,7 +150,7 @@ func (wr *walletRepoImpl) Transfer(ctx context.Context, from, to uuid.UUID, amou
 		return err
 	}
 
-	_, err = wr.db.ConnPool.Exec(ctx, sql, args)
+	_, err = wr.db.ConnPool.Exec(ctx, sql, args...)
 	if err != nil {
 		slog.Error("walletRepoImpl.Transfer - db.ConnPool.Exec", "err", err)
 		return err
@@ -179,7 +180,7 @@ func (wr *walletRepoImpl) GetTransactionHistory(ctx context.Context, walletId uu
 		return nil, err
 	}
 
-	rows, err := wr.db.ConnPool.Query(ctx, sql, args)
+	rows, err := wr.db.ConnPool.Query(ctx, sql, args...)
 	if err != nil {
 		slog.Error("walletRepoImpl.GetTransactionHistory - db.ConnPool.Query", "err", err)
 		return nil, err
@@ -191,8 +192,13 @@ func (wr *walletRepoImpl) GetTransactionHistory(ctx context.Context, walletId uu
 		// игнорируем ошибку, но:
 		// можно бы было сделать ошибку ErrScan или типа того, и записывать ее в переменную
 		// в скоупе вне цикла, а затем возвращать неполный список транзакций и ошибку
-		_ = rows.Scan(&tx)
+		_ = rows.Scan(&tx.Time, &tx.From, &tx.To, &tx.Amount)
 		transactions = append(transactions, tx)
+	}
+
+	// если не нашли транзакции - вернем nil-слайс, он в json пойдет как null
+	if len(transactions) == 0 {
+		return []entity.Transaction(nil), nil
 	}
 	return transactions, nil
 }

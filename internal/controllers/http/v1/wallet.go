@@ -14,10 +14,15 @@ type walletRoutes struct {
 	walletService service.WalletService
 }
 
-func NewWalletRoutes(g *echo.Group, ws service.WalletService) {
+func newWalletRoutes(g *echo.Group, ws service.WalletService) {
 	r := &walletRoutes{
 		walletService: ws,
 	}
+
+	g.POST("/wallet", r.CreateWallet)
+	g.POST("/wallet/:walletId/send", r.Transfer)
+	g.GET("/wallet/:walletId/history", r.TransactionHistory)
+	g.GET("/wallet/:walletId", r.Wallet)
 }
 
 // POST /api/v1/wallet
@@ -33,7 +38,7 @@ func (r *walletRoutes) CreateWallet(c echo.Context) error {
 
 // POST /api/v1/wallet/{walletId}/send
 func (r *walletRoutes) Transfer(c echo.Context) error {
-	walletId := c.Param(":walletId")
+	walletId := c.Param("walletId")
 	fromWalletId, err := uuid.Parse(walletId)
 	if err != nil {
 		newErrorMessage(c, http.StatusBadRequest, "invalid path parametr")
@@ -51,13 +56,13 @@ func (r *walletRoutes) Transfer(c echo.Context) error {
 
 	err = r.walletService.Transfer(c.Request().Context(), fromWalletId, input.To, input.Amount)
 	if errors.Is(err, service.ErrWalletNotFound) {
-		return c.JSON(http.StatusNotFound, nil)
+		return c.NoContent(http.StatusNotFound)
 	}
 	if errors.Is(err, service.ErrTargetWalletNotFound) {
-		return c.JSON(http.StatusBadRequest, nil)
+		return c.NoContent(http.StatusBadRequest)
 	}
 	if errors.Is(err, service.ErrNotEnoughBalance) {
-		return c.JSON(http.StatusBadRequest, nil)
+		return c.NoContent(http.StatusBadRequest)
 	}
 	if err != nil {
 		slog.Error("walletRoutes.Transfer - walletService.Transfer", "err", err)
@@ -65,12 +70,12 @@ func (r *walletRoutes) Transfer(c echo.Context) error {
 		return nil
 	}
 
-	return c.JSON(http.StatusOK, nil)
+	return c.NoContent(http.StatusOK)
 }
 
 // GET /api/v1/wallet/{walletId}/history
 func (r *walletRoutes) TransactionHistory(c echo.Context) error {
-	walletIdStr := c.Param(":walletId")
+	walletIdStr := c.Param("walletId")
 	walletId, err := uuid.Parse(walletIdStr)
 	if err != nil {
 		newErrorMessage(c, http.StatusBadRequest, "invalid path parametr")
@@ -79,7 +84,7 @@ func (r *walletRoutes) TransactionHistory(c echo.Context) error {
 
 	txs, err := r.walletService.TransactionHistory(c.Request().Context(), walletId)
 	if errors.Is(err, service.ErrWalletNotFound) {
-		return c.JSON(http.StatusNotFound, nil)
+		return c.NoContent(http.StatusNotFound)
 	}
 	if err != nil {
 		slog.Error("walletRoutes.TransactionHistory - walletService.TransactionHistory", "err", err)
@@ -92,7 +97,7 @@ func (r *walletRoutes) TransactionHistory(c echo.Context) error {
 
 // GET /api/v1/wallet/{walletId}
 func (r *walletRoutes) Wallet(c echo.Context) error {
-	walletIdStr := c.Param(":walletId")
+	walletIdStr := c.Param("walletId")
 	walletId, err := uuid.Parse(walletIdStr)
 	if err != nil {
 		newErrorMessage(c, http.StatusBadRequest, "invalid path parametr")
@@ -101,7 +106,7 @@ func (r *walletRoutes) Wallet(c echo.Context) error {
 
 	wallet, err := r.walletService.WalletStatus(c.Request().Context(), walletId)
 	if errors.Is(err, service.ErrWalletNotFound) {
-		return c.JSON(http.StatusNotFound, nil)
+		return c.NoContent(http.StatusNotFound)
 	}
 	if err != nil {
 		slog.Error("walletRoutes.Wallet - walletService.WalletStatus", "err", err)

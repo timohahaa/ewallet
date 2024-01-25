@@ -1,0 +1,11 @@
+server:
+  port: "8080"
+  # all bellow in seconds
+  # readTimeout:
+  # writeTimeout:
+  # shutdownTimeout:
+
+postgres:
+  maxConnPoolSize: 5
+  # лучше в .env файле
+  # url: ""
