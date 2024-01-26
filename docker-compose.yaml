@@ -9,6 +9,8 @@ services:
     env_file: .env
     ports:
       - ${HTTP_SERVER_PORT}:${HTTP_SERVER_PORT}
+    volumes:
+      - logs:/app/logs/
     restart: unless-stopped
     depends_on:
       - postgres
@@ -32,4 +34,5 @@ services:
 
 volumes:
   pg_data:
+  logs:
 

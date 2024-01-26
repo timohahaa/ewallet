@@ -16,7 +16,8 @@ type (
 		ConnPoolSize int    `yaml:"maxConnPoolSize" env:"PG_MAX_POOL_SIZE"`
 	}
 	Server struct {
-		Port string `yaml:"port" env:"HTTP_SERVER_PORT"`
+		Port    string `yaml:"port" env:"HTTP_SERVER_PORT"`
+		LogPath string `yaml:"logPath"`
 	}
 )
 

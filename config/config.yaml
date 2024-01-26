@@ -4,6 +4,7 @@ server:
   # readTimeout:
   # writeTimeout:
   # shutdownTimeout:
+  logPath: ./logs/
 
 postgres:
   maxConnPoolSize: 5

@@ -3,9 +3,9 @@ package service
 import (
 	"context"
 	"errors"
-	"log/slog"
 
 	"github.com/google/uuid"
+	"github.com/sirupsen/logrus"
 	"github.com/timohahaa/ewallet/internal/entity"
 	"github.com/timohahaa/ewallet/internal/repository"
 	"github.com/timohahaa/ewallet/internal/repository/repoerrors"
@@ -13,18 +13,20 @@ import (
 
 type walletServiceImpl struct {
 	walletRepo repository.WalletRepo
+	log        *logrus.Logger
 }
 
-func NewWalletService(wr repository.WalletRepo) *walletServiceImpl {
+func NewWalletService(wr repository.WalletRepo, log *logrus.Logger) *walletServiceImpl {
 	return &walletServiceImpl{
 		walletRepo: wr,
+		log:        log,
 	}
 }
 
 func (ws *walletServiceImpl) CreateWallet(ctx context.Context) (entity.Wallet, error) {
 	wallet, err := ws.walletRepo.CreateWallet(ctx)
 	if err != nil {
-		slog.Error("walletServiceImpl.CreateWallet - walletRepo.CreateWallet", "err", err)
+		ws.log.Error("walletServiceImpl.CreateWallet - walletRepo.CreateWallet", "err", err)
 		return entity.Wallet{}, err
 	}
 	return wallet, nil

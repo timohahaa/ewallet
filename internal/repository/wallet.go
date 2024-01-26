@@ -3,11 +3,11 @@ package repository
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/sirupsen/logrus"
 	"github.com/timohahaa/ewallet/internal/entity"
 	"github.com/timohahaa/ewallet/internal/repository/repoerrors"
 	"github.com/timohahaa/postgres"
@@ -18,12 +18,14 @@ const (
 )
 
 type walletRepoImpl struct {
-	db *postgres.Postgres
+	db  *postgres.Postgres
+	log *logrus.Logger
 }
 
-func NewWalletRepo(db *postgres.Postgres) *walletRepoImpl {
+func NewWalletRepo(db *postgres.Postgres, log *logrus.Logger) *walletRepoImpl {
 	return &walletRepoImpl{
-		db: db,
+		db:  db,
+		log: log,
 	}
 }
 
@@ -31,7 +33,7 @@ func NewWalletRepo(db *postgres.Postgres) *walletRepoImpl {
 func (wr *walletRepoImpl) CreateWallet(ctx context.Context) (entity.Wallet, error) {
 	newWalletID, err := uuid.NewRandom()
 	if err != nil {
-		slog.Error("walletRepoImpl.CreateWallet - uuid.NewRandom", "err", err)
+		wr.log.Error("walletRepoImpl.CreateWallet - uuid.NewRandom", "err", err)
 		return entity.Wallet{}, err
 	}
 
@@ -42,14 +44,14 @@ func (wr *walletRepoImpl) CreateWallet(ctx context.Context) (entity.Wallet, erro
 		ToSql()
 
 	if err != nil {
-		slog.Error("walletRepoImpl.CreateWallet - db.Builder", "err", err)
+		wr.log.Error("walletRepoImpl.CreateWallet - db.Builder", "err", err)
 		return entity.Wallet{}, err
 	}
 
 	_, err = wr.db.ConnPool.Exec(ctx, sql, args...)
 
 	if err != nil {
-		slog.Error("walletRepoImpl.CreateWallet - db.ConnPool.Exec", "err", err)
+		wr.log.Error("walletRepoImpl.CreateWallet - db.ConnPool.Exec", "err", err)
 		return entity.Wallet{}, err
 	}
 	return entity.Wallet{Id: newWalletID, Balance: InitialWalletBalance}, nil
@@ -63,7 +65,7 @@ func (wr *walletRepoImpl) getWallet(ctx context.Context, walletId uuid.UUID) (en
 		Where("id = ?", walletId).
 		ToSql()
 	if err != nil {
-		slog.Error("walletRepoImpl.getWallet - db.Builder", "err", err)
+		wr.log.Error("walletRepoImpl.getWallet - db.Builder", "err", err)
 		return entity.Wallet{}, err
 	}
 
@@ -74,7 +76,7 @@ func (wr *walletRepoImpl) getWallet(ctx context.Context, walletId uuid.UUID) (en
 		return entity.Wallet{}, pgx.ErrNoRows
 	}
 	if err != nil {
-		slog.Error("walletRepoImpl.getWallet - db.ConnPool.QueryRow", "err", err)
+		wr.log.Error("walletRepoImpl.getWallet - db.ConnPool.QueryRow", "err", err)
 		return entity.Wallet{}, err
 	}
 
@@ -90,7 +92,7 @@ func (wr *walletRepoImpl) updateWallet(ctx context.Context, walletId uuid.UUID, 
 
 	_, err = wr.db.ConnPool.Exec(ctx, sql, args...)
 	if err != nil {
-		slog.Error("walletRepoImpl.updateWallet - db.ConnPool.Exec", "err", err)
+		wr.log.Error("walletRepoImpl.updateWallet - db.ConnPool.Exec", "err", err)
 		return err
 	}
 	return nil
@@ -106,7 +108,7 @@ func (wr *walletRepoImpl) Transfer(ctx context.Context, from, to uuid.UUID, amou
 		return repoerrors.ErrWalletNotFound
 	}
 	if err != nil {
-		slog.Error("walletRepoImpl.Transfer - getWallet", "err", err)
+		wr.log.Error("walletRepoImpl.Transfer - getWallet", "err", err)
 		return err
 	}
 	// баланса не достаточно для перевода
@@ -121,7 +123,7 @@ func (wr *walletRepoImpl) Transfer(ctx context.Context, from, to uuid.UUID, amou
 		return repoerrors.ErrTargetWalletNotFound
 	}
 	if err != nil {
-		slog.Error("walletRepoImpl.Transfer - getWallet", "err", err)
+		wr.log.Error("walletRepoImpl.Transfer - getWallet", "err", err)
 		return err
 	}
 
@@ -131,12 +133,12 @@ func (wr *walletRepoImpl) Transfer(ctx context.Context, from, to uuid.UUID, amou
 	toWallet.Balance += amount
 	err = wr.updateWallet(ctx, fromWallet.Id, fromWallet.Balance)
 	if err != nil {
-		slog.Error("walletRepoImpl.Transfer - updateWallet", "err", err)
+		wr.log.Error("walletRepoImpl.Transfer - updateWallet", "err", err)
 		return err
 	}
 	err = wr.updateWallet(ctx, toWallet.Id, toWallet.Balance)
 	if err != nil {
-		slog.Error("walletRepoImpl.Transfer - updateWallet", "err", err)
+		wr.log.Error("walletRepoImpl.Transfer - updateWallet", "err", err)
 		return err
 	}
 
@@ -146,13 +148,13 @@ func (wr *walletRepoImpl) Transfer(ctx context.Context, from, to uuid.UUID, amou
 		Values(txTime, fromWallet.Id, toWallet.Id, amount).
 		ToSql()
 	if err != nil {
-		slog.Error("walletRepoImpl.Transfer - db.Builder", "err", err)
+		wr.log.Error("walletRepoImpl.Transfer - db.Builder", "err", err)
 		return err
 	}
 
 	_, err = wr.db.ConnPool.Exec(ctx, sql, args...)
 	if err != nil {
-		slog.Error("walletRepoImpl.Transfer - db.ConnPool.Exec", "err", err)
+		wr.log.Error("walletRepoImpl.Transfer - db.ConnPool.Exec", "err", err)
 		return err
 	}
 
@@ -166,7 +168,7 @@ func (wr *walletRepoImpl) GetTransactionHistory(ctx context.Context, walletId uu
 		return nil, repoerrors.ErrWalletNotFound
 	}
 	if err != nil {
-		slog.Error("walletRepoImpl.Transfer - getWallet", "err", err)
+		wr.log.Error("walletRepoImpl.Transfer - getWallet", "err", err)
 		return nil, err
 	}
 
@@ -176,13 +178,13 @@ func (wr *walletRepoImpl) GetTransactionHistory(ctx context.Context, walletId uu
 		Where("transfered_from = ? OR transfered_to = ?", wallet.Id, wallet.Id).
 		ToSql()
 	if err != nil {
-		slog.Error("walletRepoImpl.GetTransactionHistory - db.Builder", "err", err)
+		wr.log.Error("walletRepoImpl.GetTransactionHistory - db.Builder", "err", err)
 		return nil, err
 	}
 
 	rows, err := wr.db.ConnPool.Query(ctx, sql, args...)
 	if err != nil {
-		slog.Error("walletRepoImpl.GetTransactionHistory - db.ConnPool.Query", "err", err)
+		wr.log.Error("walletRepoImpl.GetTransactionHistory - db.ConnPool.Query", "err", err)
 		return nil, err
 	}
 
@@ -209,7 +211,7 @@ func (wr *walletRepoImpl) GetWalletStatus(ctx context.Context, walletId uuid.UUI
 		return entity.Wallet{}, repoerrors.ErrWalletNotFound
 	}
 	if err != nil {
-		slog.Error("walletRepoImpl.GetWalletStatus - getWallet", "err", err)
+		wr.log.Error("walletRepoImpl.GetWalletStatus - getWallet", "err", err)
 		return entity.Wallet{}, err
 	}
 

@@ -15,6 +15,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o ./binary cmd/main.go
 FROM alpine:latest
 
 WORKDIR /app
+RUN mkdir logs
 COPY --from=builder /src/binary ./app
 COPY --from=builder /src/config/config.yaml ./config/config.yaml
 
